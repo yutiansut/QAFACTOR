@@ -1,10 +1,11 @@
 import clickhouse_driver
 import datetime
 import pandas as pd
+import QUANTAXIS as QA
 
 
-class QASingleFactorBase():
-    def __init__(self, factor_name="QAF_test_2"):
+class QASingleFactor_DailyBase():
+    def __init__(self, factor_name="QAF_test"):
         self.client = clickhouse_driver.Client(
             host='localhost', database='factor')
         #self.tablelist = self.client.execute('show tables')
@@ -27,6 +28,12 @@ class QASingleFactorBase():
             print('start register')
             self.register()
             self.init_database()
+
+        self.finit()
+
+    def finit(self):
+
+        pass
 
     def __str__(self):
         return "QAFACTOR {}".format(self.factor_name)
@@ -67,18 +74,19 @@ class QASingleFactorBase():
     def insert_data(self, data: pd.DataFrame):
 
         # check the data
-        data = data.assign(date=pd.to_datetime(data.date), factor= data.factor.apply(float))
+        data = data.assign(date=pd.to_datetime(data.date),
+                           factor=data.factor.apply(float))
         columns = data.columns
         if 'date' not in columns or 'factor' not in columns:
             raise Exception('columns not exists')
 
         data = data.to_dict('records')
-        # print(data)
+        rangex = 100
+        for i in range(0, len(data), rangex):
+            self.client.execute('INSERT INTO {} VALUES'.format(
+                self.factor_name), data[i:i+rangex])
 
-        self.client.execute(
-            "INSERT INTO  {}  VALUES".format(self.factor_name), data)
         self.client.execute('OPTIMIZE TABLE {} FINAL'.format(self.factor_name))
-
 
     def update_to_database(self):
         self.insert_data(self.calc())
@@ -93,7 +101,6 @@ class QASingleFactorBase():
         }])
 
     def calc(self) -> pd.DataFrame:
-
         """
 
         the resulf of this function should be a dataframe with the folling columns
@@ -104,7 +111,6 @@ class QASingleFactorBase():
         """
         raise NotImplementedError
 
-
     def fetch_data(self, start=None, end=None) -> pd.DataFrame:
         if start is None and end is None:
             res = self.client.query_dataframe(
@@ -114,3 +120,31 @@ class QASingleFactorBase():
                 return res.set_index(['date', 'code']).sort_index()
             else:
                 return pd.DataFrame([], columns=['date', 'code', self.factor_name])
+
+
+class MA(QASingleFactor_DailyBase):
+    def finit(self):
+        pass
+
+    def calc(self) -> pd.DataFrame:
+        """
+
+        the example is just a day datasource, u can use the min data to generate a day-frequence factor
+
+        the factor should be in day frequence 
+        """
+
+        codellist = ['000001.XSHE', '000002.XSHE']
+        start = '2020-01-01'
+        end = '2021-05-22'
+        data = QA.QA_fetch_stock_day_adv(codellist, start, end).to_qfq()
+        res = data.add_func(QA.QA_indicator_MA, 5)
+        res.columns = ['factor']
+        return res.reset_index()
+
+
+if __name__ == '__main__':
+    exampleFactor = MA(factor_name='MA5')
+    exampleFactor.update_to_database()
+
+    exampleFactor.fetch_data()
