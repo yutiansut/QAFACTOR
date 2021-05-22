@@ -1,7 +1,6 @@
 import clickhouse_driver
 import datetime
 import pandas as pd
-
 class QASingleFactorBase():
     def __init__(self, factor_name ="QAF_test_2"):
         self.client = clickhouse_driver.Client(host='localhost', database= 'factor')
