@@ -1,6 +1,7 @@
 import clickhouse_driver
 import datetime
 import pandas as pd
+client =clickhouse_driver.Client(host='localhost', database='factor')
 class QASingleFactorBase():
     def __init__(self, factor_name ="QAF_test_2"):
         self.client = clickhouse_driver.Client(host='localhost', database= 'factor')
@@ -22,6 +23,10 @@ class QASingleFactorBase():
         
         self.description = 'None'
         
+    
+
+    
+    
     
         if not self.check_if_exist():
             print('start register')
@@ -55,18 +60,17 @@ class QASingleFactorBase():
                             ORDER BY (date, code)\
                             SETTINGS index_granularity=8192'.format(self.factor_name))
     
-    @property
-    def msg(self):
-        return {
+
+
+    
+    def register(self):
+        self.client.execute("INSERT INTO regfactor VALUES",[{
             'factorname': self.factor_name,
             'create_date': datetime.date.today(),
             'update_date': datetime.date.today(),
             'version': 1.0,
             'description': self.description
-        }
-    
-    def register(self):
-        self.client.execute("INSERT INTO regfactor VALUES",[self.msg])
+        }])
         self.client.execute('OPTIMIZE TABLE regfactor FINAL')
         
         
@@ -98,4 +102,12 @@ class QASingleFactorBase():
         
         
     def update_to_database(self):
-        return self.insert_data(self.calc(), )
+        self.insert_data(self.calc())
+        raw_reg_message = self.client.execute("select create_date from regfactor where factorname=='{}'".format(self.factor_name))[0][0]
+        self.client.execute("INSERT INTO regfactor VALUES",[{
+            'factorname': self.factor_name,
+            'create_date': raw_reg_message,
+            'update_date': datetime.date.today(),
+            'version': 1.0,
+            'description': self.description
+        }])
